@@ -1,0 +1,122 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vaultgate-api
+  labels: &labels
+    app.kubernetes.io/name: vaultgate
+    app.kubernetes.io/component: api
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels: *labels
+  template:
+    metadata:
+      labels: *labels
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: vaultgate-api
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 40
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: *labels
+      containers:
+        - name: api
+          # Pin by digest in real deployments (CI writes it via kustomize edit set image).
+          image: ghcr.io/josh2106/vaultgate:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: vaultgate-config
+          env:
+            - name: VG_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: vaultgate-secrets
+                  key: database-url
+            - name: VG_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: vaultgate-secrets
+                  key: redis-url
+            - name: VG_METRICS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: vaultgate-secrets
+                  key: metrics-token
+          volumeMounts:
+            - name: jwt-keys
+              mountPath: /keys/jwt
+              readOnly: true
+            - name: master-keys
+              mountPath: /keys/master
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            privileged: false
+            capabilities:
+              drop: ["ALL"]
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 2
+          lifecycle:
+            preStop:
+              # Give the endpoints controller time to remove the pod before SIGTERM.
+              sleep:
+                seconds: 10
+      volumes:
+        - name: jwt-keys
+          secret:
+            secretName: vaultgate-jwt-keys
+            defaultMode: 0400
+        - name: master-keys
+          secret:
+            secretName: vaultgate-master-keys
+            defaultMode: 0400
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi

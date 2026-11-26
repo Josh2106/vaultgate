@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vaultgate
+  labels:
+    # Enforce the "restricted" Pod Security Standard for everything in the namespace.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vaultgate-api
+  annotations:
+    # IRSA / workload identity binding (see terraform/) - no static cloud credentials.
+    eks.amazonaws.com/role-arn: arn:aws:iam::111111111111:role/vaultgate-api
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vaultgate-config
+data:
+  VG_ENVIRONMENT: production
+  VG_LOG_LEVEL: INFO
+  VG_LOG_JSON: "true"
+  VG_PUBLIC_BASE_URL: https://api.vaultgate.example.com
+  VG_CORS_ORIGINS: https://app.vaultgate.example.com
+  VG_HSTS_ENABLED: "true"
+  VG_TRUSTED_PROXY_HOPS: "1"
+  VG_JWT_KEYS_DIR: /keys/jwt
+  VG_JWT_AUTO_GENERATE: "false"
+  VG_MASTER_KEY_FILE: /keys/master/master-keys.json
+  VG_MASTER_KEY_AUTO_GENERATE: "false"
+  VG_OTEL_ENABLED: "true"
+  VG_OTEL_EXPORTER_ENDPOINT: http://otel-collector.observability:4318/v1/traces
