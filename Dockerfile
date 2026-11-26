@@ -34,6 +34,11 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     VG_ENVIRONMENT=production
 
+# Pull in Debian security updates for the base image (fixes CVEs flagged by Trivy)
+RUN apt-get update \
+ && apt-get upgrade -y --no-install-recommends \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system --gid 10001 vaultgate \
  && useradd --system --uid 10001 --gid vaultgate --home-dir /nonexistent \
       --shell /usr/sbin/nologin vaultgate \
