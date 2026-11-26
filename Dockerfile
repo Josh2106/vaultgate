@@ -2,7 +2,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1: build a self-contained virtualenv from the hash-pinned lock file.
 # ---------------------------------------------------------------------------
-FROM python:3.12.10-slim-bookworm AS builder
+FROM python:3.15.1-slim-bookworm AS builder
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -22,7 +22,7 @@ RUN pip install --no-deps . && python -m compileall -q /opt/venv
 # ---------------------------------------------------------------------------
 # Stage 2: minimal runtime. No build tools, no pip cache, non-root, read-only FS.
 # ---------------------------------------------------------------------------
-FROM python:3.12.10-slim-bookworm AS runtime
+FROM python:3.15.1-slim-bookworm AS runtime
 
 LABEL org.opencontainers.image.title="vaultgate" \
       org.opencontainers.image.description="Multi-tenant secrets & API-key management API" \
