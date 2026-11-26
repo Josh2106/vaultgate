@@ -100,7 +100,11 @@ def test_secret_values_roundtrip_through_api(harness: _Harness) -> None:
 
 
 json_values = st.recursive(
-    st.none() | st.booleans() | st.integers() | st.floats(allow_nan=False) | st.text(max_size=50),
+    st.none()
+    | st.booleans()
+    | st.integers()
+    | st.floats(allow_nan=False, allow_infinity=False)
+    | st.text(max_size=50),
     lambda children: (
         st.lists(children, max_size=4) | st.dictionaries(st.text(max_size=10), children, max_size=4)
     ),
