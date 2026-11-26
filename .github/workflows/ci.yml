@@ -108,7 +108,7 @@ jobs:
             vaultgate:${{ github.sha }}
           for i in $(seq 1 20); do curl -fs localhost:8000/healthz && break; sleep 1; done
           docker logs vg
-      - uses: aquasecurity/trivy-action@0.28.0
+      - uses: aquasecurity/trivy-action@0.33.1
         with:
           image-ref: vaultgate:${{ github.sha }}
           format: sarif
@@ -119,7 +119,7 @@ jobs:
         if: always()
         with:
           sarif_file: trivy.sarif
-      - uses: aquasecurity/trivy-action@0.28.0
+      - uses: aquasecurity/trivy-action@0.33.1
         with:
           image-ref: vaultgate:${{ github.sha }}
           exit-code: "1"
