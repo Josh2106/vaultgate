@@ -108,23 +108,21 @@ jobs:
             vaultgate:${{ github.sha }}
           for i in $(seq 1 20); do curl -fs localhost:8000/healthz && break; sleep 1; done
           docker logs vg
-      - uses: aquasecurity/trivy-action@v0.33.1
-        with:
-          image-ref: vaultgate:${{ github.sha }}
-          format: sarif
-          output: trivy.sarif
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
+      - name: Install Trivy
+        run: |
+          sudo apt-get install -y wget apt-transport-https gnupg
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update -qq && sudo apt-get install -y trivy
+          trivy --version
+      - name: Trivy scan (SARIF report)
+        run: trivy image --format sarif --output trivy.sarif --severity CRITICAL,HIGH --ignore-unfixed vaultgate:${{ github.sha }}
       - uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: trivy.sarif
-      - uses: aquasecurity/trivy-action@v0.33.1
-        with:
-          image-ref: vaultgate:${{ github.sha }}
-          exit-code: "1"
-          severity: CRITICAL
-          ignore-unfixed: true
+      - name: Trivy gate (fail on CRITICAL)
+        run: trivy image --exit-code 1 --severity CRITICAL --ignore-unfixed vaultgate:${{ github.sha }}
 
   manifests:
     name: Validate YAML manifests
