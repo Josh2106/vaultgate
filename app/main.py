@@ -59,9 +59,10 @@ def create_app(
         try:
             yield
         finally:
-            # Graceful shutdown: flip readiness first so the load balancer stops routing
-            # to us, then release pools. Uvicorn finishes in-flight requests before
-            # lifespan shutdown runs (bounded by --timeout-graceful-shutdown).
+            # Graceful shutdown: uvicorn has already stopped accepting connections and
+            # drained in-flight requests (--timeout-graceful-shutdown); traffic was
+            # steered away beforehand by the k8s preStop hook. Mark draining so any
+            # late readiness probe fails, then release pools.
             vg.draining = True
             log.info("shutdown")
             await vg.aclose()
