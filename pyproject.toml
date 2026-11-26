@@ -1,0 +1,139 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vaultgate"
+version = "0.1.0"
+description = "Secure multi-tenant secrets & API-key management platform for teams."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Joshua Kumar" }]
+requires-python = ">=3.12"
+classifiers = [
+  "Framework :: FastAPI",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Security :: Cryptography",
+  "Typing :: Typed",
+]
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "pydantic>=2.8",
+  "pydantic-settings>=2.4",
+  "email-validator>=2.2",
+  "python-multipart>=0.0.9",
+  "sqlalchemy[asyncio]>=2.0.30",
+  "alembic>=1.13",
+  "aiosqlite>=0.20",
+  "asyncpg>=0.29",
+  "redis>=5.0",
+  "argon2-cffi>=23.1",
+  "pyjwt[crypto]>=2.9",
+  "cryptography>=43",
+  "pyotp>=2.9",
+  "structlog>=24.4",
+  "prometheus-client>=0.20",
+  "opentelemetry-api>=1.27",
+  "opentelemetry-sdk>=1.27",
+  "opentelemetry-exporter-otlp-proto-http>=1.27",
+  "opentelemetry-instrumentation-fastapi>=0.48b0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+  "pytest-cov>=5.0",
+  "httpx>=0.27",
+  "hypothesis>=6.112",
+  "fakeredis[lua]>=2.24",
+  "ruff>=0.6",
+  "mypy>=1.11",
+  "pre-commit>=3.8",
+  "pip-audit>=2.7",
+  "pyyaml>=6.0",
+  "types-pyyaml>=6.0",
+]
+
+[project.scripts]
+vaultgate = "app.cli:main"
+
+[project.urls]
+Repository = "https://github.com/Josh2106/vaultgate"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["migrations/versions"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W", "F", "I", "B", "UP", "N", "S", "C4", "SIM", "RUF", "ASYNC",
+  "PT", "RET", "PL", "TRY", "PERF", "DTZ", "T20", "ERA",
+]
+ignore = [
+  "PLR0913",  # FastAPI handlers legitimately take many injected params
+  "PLR0917",  # ditto (positional dependency parameters)
+  "N818",     # problem types are named after the condition (NotFound, Conflict), not "Error"
+  "PLR2004",  # magic values in comparisons are fine for HTTP status codes
+  "TRY003",   # long messages in exception constructors are intentional
+  "B008",     # FastAPI Depends() in defaults is idiomatic
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "PLR0915", "PLC0415", "PT018", "PLR0124"]
+"app/core/permissions.py" = ["S105"]  # "secret:*" permission names are not passwords
+"app/cli.py" = ["T201"]
+"migrations/**" = ["ERA001"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.Security"]
+
+# ---------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+warn_unreachable = true
+files = ["app", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["pyotp", "pyotp.*", "fakeredis", "fakeredis.*"]
+ignore_missing_imports = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+filterwarnings = ["error::pytest.PytestUnraisableExceptionWarning"]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+# SQLAlchemy async runs ORM code inside greenlets; Argon2 runs in a threadpool.
+concurrency = ["greenlet", "thread"]
+parallel = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 85
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  '@(abc\.)?abstractmethod',
+  '^\s*\.\.\.$',
+]

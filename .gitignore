@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# Tooling
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Local state - NEVER commit keys or databases
+.env
+.keys/
+*.db
+*.db-shm
+*.db-wal
+*.pem
+master-keys*.json
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate*
+terraform/.terraform.lock.hcl
+*.tfvars
+!*.tfvars.example
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
