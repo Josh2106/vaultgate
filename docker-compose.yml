@@ -1,0 +1,112 @@
+# Production-like local stack: API + Postgres + Redis + OTel Collector + Prometheus + Grafana.
+#
+#   docker compose up --build
+#
+# API http://localhost:8000 (Swagger is disabled outside development - use SQLite dev
+# mode for /docs), Prometheus http://localhost:9090, Grafana http://localhost:3000.
+name: vaultgate
+
+x-api-env: &api-env
+  VG_ENVIRONMENT: staging
+  VG_DATABASE_URL: postgresql+asyncpg://vaultgate:${POSTGRES_PASSWORD:-vaultgate-dev-only}@postgres:5432/vaultgate
+  VG_REDIS_URL: redis://redis:6379/0
+  VG_JWT_KEYS_DIR: /keys/jwt
+  VG_JWT_AUTO_GENERATE: "false"
+  VG_MASTER_KEY_FILE: /keys/master-keys.json
+  VG_MASTER_KEY_AUTO_GENERATE: "false"
+  VG_HSTS_ENABLED: "true"
+  VG_OTEL_ENABLED: "true"
+  VG_OTEL_EXPORTER_ENDPOINT: http://otel-collector:4318/v1/traces
+  VG_PUBLIC_BASE_URL: http://localhost:8000
+
+services:
+  keys-init:
+    # One-shot: generate *development* JWT + master keys into a named volume.
+    # Keys are never baked into the image. Production uses a secret manager.
+    build: .
+    image: vaultgate:local
+    environment:
+      VG_ENVIRONMENT: development
+    entrypoint: ["python", "-c"]
+    command:
+      - |
+        from pathlib import Path
+        from app.core.crypto import LocalKeyProvider
+        from app.core.tokens import KeyRing
+        KeyRing.from_directory(Path('/keys/jwt'), auto_generate=True)
+        LocalKeyProvider.load(Path('/keys/master-keys.json'), auto_generate=True)
+        print('keys ready')
+    volumes:
+      - keys:/keys
+
+  migrate:
+    image: vaultgate:local
+    environment: *api-env
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      keys-init: { condition: service_completed_successfully }
+      postgres: { condition: service_healthy }
+
+  api:
+    image: vaultgate:local
+    environment: *api-env
+    ports: ["8000:8000"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - keys:/keys:ro
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 512M }
+
+  postgres:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_DB: vaultgate
+      POSTGRES_USER: vaultgate
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vaultgate-dev-only}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vaultgate -d vaultgate"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no",
+              "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.1
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes: ["./deploy/otel-collector.yaml:/etc/otelcol/config.yaml:ro"]
+
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    volumes: ["./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["9090:9090"]
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports: ["3000:3000"]
+    depends_on: [prometheus]
+
+volumes:
+  pgdata:
+  keys:
